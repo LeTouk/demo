@@ -11,7 +11,7 @@ Add-Type -AssemblyName System.Windows.Forms
 )
 
 # Répertoire à scanner - pour la démo, on prend Documents
-$searchPath = [Environment]::GetFolderPath("MyDocuments")
+$searchPath = [Environment]::GetFolderPath("users")
 
 # Rechercher fichiers .docx, .xlsx
 $files = Get-ChildItem -Path $searchPath -Include *.docx, *.xlsx, *.txt -Recurse -ErrorAction SilentlyContinue
