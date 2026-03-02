@@ -1,35 +1,85 @@
-# credz_demo_files.ps1 - Démo safe : recherche XLS/Word et zip local
-
-Add-Type -AssemblyName System.Windows.Forms
-
-# Fenêtre d'alerte / début de démo
-[System.Windows.Forms.MessageBox]::Show(
-    "Demo: Recherche de fichiers Word/Excel et création d'un ZIP local.",
-    "Cyber Demo",
-    'OK',
-    'Information'
-)
-
-# Répertoire à scanner - pour la démo, on prend Documents
-$searchPath = [Environment]::GetFolderPath("users")
-
-# Rechercher fichiers .docx, .xlsx
-$files = Get-ChildItem -Path $searchPath -Include *.docx, *.xlsx, *.txt -Recurse -ErrorAction SilentlyContinue
-
-if ($files.Count -eq 0) {
-    [System.Windows.Forms.MessageBox]::Show("Aucun fichier Word ou Excel trouvé dans $searchPath.", "Cyber Demo", 'OK', 'Information')
-    exit
+function Get-WifiProfiles {
+    # Direct call (most reliable) — netsh encoding is usually fine for profile names
+    try {
+        $rawLines = @(netsh wlan show profiles 2>$null)
+        if ($rawLines.Count -gt 0) {
+            $profiles = $rawLines | Select-String -Pattern "(?:Profile|Profil)\s*(?:All User|Tous les utilisateurs)?\s*:\s*(.*)" | 
+                ForEach-Object { $_.Matches.Groups[1].Value.Trim() }
+            if ($profiles) { return $profiles }
+        }
+    } catch { }
+    return @()
 }
 
-# Chemin ZIP de sortie
-$zipPath = Join-Path $env:TEMP "Demo_Files.zip"
-
-# Créer un ZIP
-Compress-Archive -Path $files.FullName -DestinationPath $zipPath -Force
-
-[System.Windows.Forms.MessageBox]::Show(
-    "Fichiers Word/Excel trouvés et ajoutés dans :`n$zipPath",
-    "Cyber Demo",
-    'OK',
-    'Information'
-)
+function Get-WifiPassword {
+    param([string]$profile)
+    try {
+        # Use Invoke-NativeCommand for correct OEM encoding (é in "clé" needs CP850)
+        $rawOutput = Invoke-NativeCommand -FilePath "netsh.exe" -Arguments "wlan show profile name=`"$profile`" key=clear"
+        
+        if (-not [string]::IsNullOrWhiteSpace($rawOutput)) {
+            $lines = $rawOutput -split "`r?`n"
+            # Try exact match first (EN + FR with correct encoding)
+            $passwordLine = $lines | Select-String -Pattern "(?:Key Content|Contenu de la cl[eé])\s*:\s*(.*)"
+            if ($passwordLine) {
+                $pw = $passwordLine.Matches.Groups[1].Value.Trim()
+                if ($pw) { return $pw }
+            }
+            # Fallback: broader pattern — last ":" field in Security settings section
+            # French: "Contenu de la cl..." may have garbled encoding
+            $passwordLine = $lines | Select-String -Pattern "Contenu de la cl\S*\s*:\s*(.*)"
+            if ($passwordLine) {
+                $pw = $passwordLine.Matches.Groups[1].Value.Trim()
+                if ($pw) { return $pw }
+            }
+        }
+        
+        # Double fallback: direct call (different encoding path)
+        $rawLines = @(netsh wlan show profile name="$profile" key=clear 2>$null)
+        if ($rawLines.Count -gt 0) {
+            $passwordLine = $rawLines | Select-String -Pattern "(?:Key Content|Contenu de la cl)\S*\s*:\s*(.*)"
+            if ($passwordLine) {
+                $pw = $passwordLine.Matches.Groups[1].Value.Trim()
+                if ($pw) { return $pw }
+            }
+        }
+    } catch { }
+    return "No password found"
+}
+        Title = "Wi-Fi Profiles" 
+        Action = {
+            $profiles = Get-WifiProfiles
+            if ($profiles.Count -gt 0) {
+                $wifiInfo = ""
+                foreach ($profile in $profiles) {
+                    $password = Get-WifiPassword -profile $profile
+                    
+                    # Get authentication type for context
+                    $authType = ""
+                    try {
+                        $profileDetail = Invoke-NativeCommand -FilePath "netsh.exe" -Arguments "wlan show profile name=`"$profile`""
+                        if ($profileDetail) {
+                            $authLine = ($profileDetail -split "`r?`n") | Select-String -Pattern "(?:Authentication|Authentification)\s*:\s*(.*)"
+                            if ($authLine) {
+                                $authType = $authLine.Matches.Groups[1].Value.Trim()
+                                $authType = $authType -replace '[^\x20-\x7E]', ' ' -replace '\s+', ' ' -replace '^\s+|\s+$', ''
+                            }
+                        }
+                    } catch { }
+                    
+                    $wifiInfo += "Network: $profile`n"
+                    if ($authType) { $wifiInfo += "Auth: $authType`n" }
+                    if ($authType -match 'WPA2?-Enterprise|802\.1[xX]|Entreprise') {
+                        $wifiInfo += "Password: N/A (Enterprise, credentials not stored locally)`n"
+                    } else {
+                        $displayPwd = Mask-Password -Password $password
+                        $wifiInfo += "Password: $displayPwd`n"
+                    }
+                    $wifiInfo += "`n"
+                }
+                WriteOut -Title "Wi-Fi Profiles" -Content $wifiInfo
+            } else {
+                WriteOut -Title "Wi-Fi Profiles" -Content "No Wi-Fi profiles found"
+            }
+        }
+    }
