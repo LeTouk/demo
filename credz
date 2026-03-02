@@ -1,85 +1,46 @@
-function Get-WifiProfiles {
-    # Direct call (most reliable) — netsh encoding is usually fine for profile names
-    try {
-        $rawLines = @(netsh wlan show profiles 2>$null)
-        if ($rawLines.Count -gt 0) {
-            $profiles = $rawLines | Select-String -Pattern "(?:Profile|Profil)\s*(?:All User|Tous les utilisateurs)?\s*:\s*(.*)" | 
-                ForEach-Object { $_.Matches.Groups[1].Value.Trim() }
-            if ($profiles) { return $profiles }
-        }
-    } catch { }
-    return @()
+
+# --------------------------------------------
+#      WIFI PASSWORD AWARENESS DEMO
+# --------------------------------------------
+
+Write-Host "`n=== ⚠️ AWARENESS DEMO : MOTS DE PASSE WIFI SAUVEGARDÉS ⚠️ ===" -ForegroundColor Yellow
+Write-Host "Sur une machine Windows, les mots de passe WiFi stockés localement" -ForegroundColor White
+Write-Host "peuvent être récupérés facilement si l’attaquant a accès à la session." -ForegroundColor White
+Write-Host "Voici ce que j’ai pu extraire..." -ForegroundColor White
+Write-Host "---------------------------------------------------------------`n" -ForegroundColor DarkGray
+
+# Récupère la liste des profils WiFi
+$profiles = netsh wlan show profiles | Select-String "Profil Tous les utilisateurs" | ForEach-Object {
+    ($_ -split ":")[1].Trim()
 }
 
-function Get-WifiPassword {
-    param([string]$profile)
-    try {
-        # Use Invoke-NativeCommand for correct OEM encoding (é in "clé" needs CP850)
-        $rawOutput = Invoke-NativeCommand -FilePath "netsh.exe" -Arguments "wlan show profile name=`"$profile`" key=clear"
-        
-        if (-not [string]::IsNullOrWhiteSpace($rawOutput)) {
-            $lines = $rawOutput -split "`r?`n"
-            # Try exact match first (EN + FR with correct encoding)
-            $passwordLine = $lines | Select-String -Pattern "(?:Key Content|Contenu de la cl[eé])\s*:\s*(.*)"
-            if ($passwordLine) {
-                $pw = $passwordLine.Matches.Groups[1].Value.Trim()
-                if ($pw) { return $pw }
-            }
-            # Fallback: broader pattern — last ":" field in Security settings section
-            # French: "Contenu de la cl..." may have garbled encoding
-            $passwordLine = $lines | Select-String -Pattern "Contenu de la cl\S*\s*:\s*(.*)"
-            if ($passwordLine) {
-                $pw = $passwordLine.Matches.Groups[1].Value.Trim()
-                if ($pw) { return $pw }
-            }
-        }
-        
-        # Double fallback: direct call (different encoding path)
-        $rawLines = @(netsh wlan show profile name="$profile" key=clear 2>$null)
-        if ($rawLines.Count -gt 0) {
-            $passwordLine = $rawLines | Select-String -Pattern "(?:Key Content|Contenu de la cl)\S*\s*:\s*(.*)"
-            if ($passwordLine) {
-                $pw = $passwordLine.Matches.Groups[1].Value.Trim()
-                if ($pw) { return $pw }
-            }
-        }
-    } catch { }
-    return "No password found"
-}
-        Title = "Wi-Fi Profiles" 
-        Action = {
-            $profiles = Get-WifiProfiles
-            if ($profiles.Count -gt 0) {
-                $wifiInfo = ""
-                foreach ($profile in $profiles) {
-                    $password = Get-WifiPassword -profile $profile
-                    
-                    # Get authentication type for context
-                    $authType = ""
-                    try {
-                        $profileDetail = Invoke-NativeCommand -FilePath "netsh.exe" -Arguments "wlan show profile name=`"$profile`""
-                        if ($profileDetail) {
-                            $authLine = ($profileDetail -split "`r?`n") | Select-String -Pattern "(?:Authentication|Authentification)\s*:\s*(.*)"
-                            if ($authLine) {
-                                $authType = $authLine.Matches.Groups[1].Value.Trim()
-                                $authType = $authType -replace '[^\x20-\x7E]', ' ' -replace '\s+', ' ' -replace '^\s+|\s+$', ''
-                            }
-                        }
-                    } catch { }
-                    
-                    $wifiInfo += "Network: $profile`n"
-                    if ($authType) { $wifiInfo += "Auth: $authType`n" }
-                    if ($authType -match 'WPA2?-Enterprise|802\.1[xX]|Entreprise') {
-                        $wifiInfo += "Password: N/A (Enterprise, credentials not stored locally)`n"
-                    } else {
-                        $displayPwd = Mask-Password -Password $password
-                        $wifiInfo += "Password: $displayPwd`n"
-                    }
-                    $wifiInfo += "`n"
-                }
-                WriteOut -Title "Wi-Fi Profiles" -Content $wifiInfo
-            } else {
-                WriteOut -Title "Wi-Fi Profiles" -Content "No Wi-Fi profiles found"
-            }
-        }
+$results = @()
+
+foreach ($profile in $profiles) {
+    # Extraction du mot de passe en clair
+    $details = netsh wlan show profile name="$profile" key=clear
+
+    $ssid = $profile
+    $passwordLine = $details | Select-String "Contenu de la clé"
+
+    if ($passwordLine) {
+        $password = ($passwordLine -split ":")[1].Trim()
+    } else {
+        $password = "(Aucun mot de passe trouvé)"
     }
+
+    # Stockage pour affichage joli
+    $results += [PSCustomObject]@{
+        SSID     = $ssid
+        Password = $password
+    }
+}
+
+# Affichage propre en tableau
+$results | Format-Table -AutoSize
+
+Write-Host "`n---------------------------------------------------------------" -ForegroundColor DarkGray
+Write-Host "💡 *Moralité :* Toute personne ayant accès à votre session Windows" -ForegroundColor Cyan
+Write-Host "peut potentiellement récupérer vos mots de passe WiFi sauvegardés." -ForegroundColor Cyan
+Write-Host "Protégez votre poste, verrouillez votre session, et évitez d’enregistrer des mots de passe sensibles." -ForegroundColor Cyan
+Write-Host "---------------------------------------------------------------`n" -ForegroundColor DarkGray
