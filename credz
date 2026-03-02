@@ -1,15 +1,10 @@
 
-# --------------------------------------------
-#      WIFI PASSWORD AWARENESS DEMO
-# --------------------------------------------
+# Force PowerShell à utiliser UTF-8 pour éviter les ? à la place des accents/symboles
+chcp 65001 > $null
 
 Write-Host "`n=== ⚠️ AWARENESS DEMO : MOTS DE PASSE WIFI SAUVEGARDÉS ⚠️ ===" -ForegroundColor Yellow
-Write-Host "Sur une machine Windows, les mots de passe WiFi stockés localement" -ForegroundColor White
-Write-Host "peuvent être récupérés facilement si l’attaquant a accès à la session." -ForegroundColor White
-Write-Host "Voici ce que j’ai pu extraire..." -ForegroundColor White
-Write-Host "---------------------------------------------------------------`n" -ForegroundColor DarkGray
 
-# Récupère la liste des profils WiFi
+# Récupère les profils WiFi
 $profiles = netsh wlan show profiles | Select-String "Profil Tous les utilisateurs" | ForEach-Object {
     ($_ -split ":")[1].Trim()
 }
@@ -17,30 +12,37 @@ $profiles = netsh wlan show profiles | Select-String "Profil Tous les utilisateu
 $results = @()
 
 foreach ($profile in $profiles) {
-    # Extraction du mot de passe en clair
     $details = netsh wlan show profile name="$profile" key=clear
 
-    $ssid = $profile
     $passwordLine = $details | Select-String "Contenu de la clé"
-
     if ($passwordLine) {
-        $password = ($passwordLine -split ":")[1].Trim()
-    } else {
-        $password = "(Aucun mot de passe trouvé)"
+        $password = ($passwordLine -split ":",2)[1].Trim()
+
+        # Masque les 4 derniers caractères (ou moins si mot de passe court)
+        $len = $password.Length
+        if ($len -gt 4) {
+            $masked = $password.Substring(0, $len - 4) + "****"
+        }
+        elseif ($len -gt 1) {
+            $masked = "*" * $len
+        }
+        else {
+            $masked = $password
+        }
+    }
+    else {
+        $password = "(Aucun mot de passe)"
+        $masked   = $password
     }
 
-    # Stockage pour affichage joli
     $results += [PSCustomObject]@{
-        SSID     = $ssid
-        Password = $password
+        SSID       = $profile
+        Password   = $masked
     }
 }
 
-# Affichage propre en tableau
 $results | Format-Table -AutoSize
 
-Write-Host "`n---------------------------------------------------------------" -ForegroundColor DarkGray
-Write-Host "💡 *Moralité :* Toute personne ayant accès à votre session Windows" -ForegroundColor Cyan
-Write-Host "peut potentiellement récupérer vos mots de passe WiFi sauvegardés." -ForegroundColor Cyan
-Write-Host "Protégez votre poste, verrouillez votre session, et évitez d’enregistrer des mots de passe sensibles." -ForegroundColor Cyan
-Write-Host "---------------------------------------------------------------`n" -ForegroundColor DarkGray
+Write-Host "`n💡 Moralité : Toute personne ayant accès à votre session Windows peut extraire vos mots de passe WiFi." -ForegroundColor Cyan
+Write-Host "Verrouillez votre poste, évitez d’enregistrer des mots de passe sensibles, et restez prudents.`n" -ForegroundColor Cyan
+``
