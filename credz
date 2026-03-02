@@ -1,25 +1,35 @@
+# credz_demo_files.ps1 - Démo safe : recherche XLS/Word et zip local
+
 Add-Type -AssemblyName System.Windows.Forms
 
-# --- Fake security alert
+# Fenêtre d'alerte / début de démo
 [System.Windows.Forms.MessageBox]::Show(
-    "Unusual sign-in detected.`nPlease authenticate your Microsoft Account.",
-    "Microsoft Security",
-    [System.Windows.Forms.MessageBoxButtons]::OK,
-    [System.Windows.Forms.MessageBoxIcon]::Warning
+    "Demo: Recherche de fichiers Word/Excel et création d'un ZIP local.",
+    "Cyber Demo",
+    'OK',
+    'Information'
 )
 
-# --- Fake credential prompt (NO ACCESS TO PASSWORD)
-$null = $host.UI.PromptForCredential(
-    "Microsoft Account",
-    "Please confirm your identity",
-    "$env:USERDOMAIN\$env:USERNAME",
-    $env:USERDOMAIN
-)
+# Répertoire à scanner - pour la démo, on prend Documents
+$searchPath = [Environment]::GetFolderPath("MyDocuments")
 
-# --- Awareness message
+# Rechercher fichiers .docx, .xlsx
+$files = Get-ChildItem -Path $searchPath -Include *.docx, *.xlsx -Recurse -ErrorAction SilentlyContinue
+
+if ($files.Count -eq 0) {
+    [System.Windows.Forms.MessageBox]::Show("Aucun fichier Word ou Excel trouvé dans $searchPath.", "Cyber Demo", 'OK', 'Information')
+    exit
+}
+
+# Chemin ZIP de sortie
+$zipPath = Join-Path $env:TEMP "Demo_Files.zip"
+
+# Créer un ZIP
+Compress-Archive -Path $files.FullName -DestinationPath $zipPath -Force
+
 [System.Windows.Forms.MessageBox]::Show(
-    "✅ DEMONSTRATION COMPLETE`n`nThis was a cybersecurity awareness demo.`nNever enter your password in unexpected pop-ups.",
-    "Cyber Awareness",
-    [System.Windows.Forms.MessageBoxButtons]::OK,
-    [System.Windows.Forms.MessageBoxIcon]::Information
+    "Fichiers Word/Excel trouvés et ajoutés dans :`n$zipPath",
+    "Cyber Demo",
+    'OK',
+    'Information'
 )
