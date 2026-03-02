@@ -1,10 +1,7 @@
-
-# Force PowerShell à utiliser UTF-8 pour éviter les ? à la place des accents/symboles
 chcp 65001 > $null
 
-Write-Host "`n=== ⚠️ AWARENESS DEMO : MOTS DE PASSE WIFI SAUVEGARDÉS ⚠️ ===" -ForegroundColor Yellow
+Write-Host "AWARENESS DEMO : WIFI PASSWORD " -ForegroundColor Yellow
 
-# Récupère les profils WiFi
 $profiles = netsh wlan show profiles | Select-String "Profil Tous les utilisateurs" | ForEach-Object {
     ($_ -split ":")[1].Trim()
 }
@@ -31,7 +28,7 @@ foreach ($profile in $profiles) {
         }
     }
     else {
-        $password = "(Aucun mot de passe)"
+        $password = "No password"
         $masked   = $password
     }
 
@@ -42,7 +39,3 @@ foreach ($profile in $profiles) {
 }
 
 $results | Format-Table -AutoSize
-
-Write-Host "`n💡 Moralité : Toute personne ayant accès à votre session Windows peut extraire vos mots de passe WiFi." -ForegroundColor Cyan
-Write-Host "Verrouillez votre poste, évitez d’enregistrer des mots de passe sensibles, et restez prudents.`n" -ForegroundColor Cyan
-``
