@@ -14,7 +14,7 @@ Add-Type -AssemblyName System.Windows.Forms
 $searchPath = [Environment]::GetFolderPath("MyDocuments")
 
 # Rechercher fichiers .docx, .xlsx
-$files = Get-ChildItem -Path $searchPath -Include *.docx, *.xlsx -Recurse -ErrorAction SilentlyContinue
+$files = Get-ChildItem -Path $searchPath -Include *.docx, *.xlsx, *.txt -Recurse -ErrorAction SilentlyContinue
 
 if ($files.Count -eq 0) {
     [System.Windows.Forms.MessageBox]::Show("Aucun fichier Word ou Excel trouvé dans $searchPath.", "Cyber Demo", 'OK', 'Information')
