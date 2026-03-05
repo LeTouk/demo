@@ -1,21 +1,31 @@
 chcp 65001 > $null
 
-Write-Host "AWARENESS DEMO : WIFI PASSWORD " -ForegroundColor Yellow
+Write-Host "AWARENESS DEMO : WIFI PASSWORDS" -ForegroundColor Yellow
 
-$profiles = netsh wlan show profiles | Select-String "Profil Tous les utilisateurs" | ForEach-Object {
-    ($_ -split ":")[1].Trim()
-}
+# --- Détection automatique FR/EN pour la ligne des profils ---
+$profileRegex = "Profil Tous les utilisateurs|All User Profile"
+
+# Récupération des profils
+$profiles = netsh wlan show profiles |
+    Select-String $profileRegex |
+    ForEach-Object {
+        ($_ -split ":", 2)[1].Trim()
+    }
 
 $results = @()
 
 foreach ($profile in $profiles) {
+
+    # Détails du profil + key=clear
     $details = netsh wlan show profile name="$profile" key=clear
 
-    $passwordLine = $details | Select-String "Contenu de la clé"
+    # --- Détection auto FR/EN de la ligne du mot de passe ---
+    $passwordLine = $details | Select-String "Contenu de la clé|Key Content"
+
     if ($passwordLine) {
         $password = ($passwordLine -split ":",2)[1].Trim()
 
-        # Masque les 4 derniers caractères (ou moins si mot de passe court)
+        # Masquage des 4 derniers caractères
         $len = $password.Length
         if ($len -gt 4) {
             $masked = $password.Substring(0, $len - 4) + "****"
@@ -33,8 +43,8 @@ foreach ($profile in $profiles) {
     }
 
     $results += [PSCustomObject]@{
-        SSID       = $profile
-        Password   = $masked
+        SSID     = $profile
+        Password = $masked
     }
 }
 
